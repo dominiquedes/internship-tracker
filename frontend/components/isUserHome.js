@@ -107,6 +107,8 @@ function IsUserHome({ onLogout }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [burst, setBurst] = useState(null);
+  const [leaving, setLeaving] = useState(() => new Set());
+  const removing = useRef(new Set());
 
   useEffect(() => {
     const token = readToken();
@@ -197,6 +199,63 @@ function IsUserHome({ onLogout }) {
     }
   }
 
+  function rowClass(internship) {
+    const names = [];
+    if (internship.status === "rejected") {
+      names.push("is-rejected");
+    }
+    if (leaving.has(internship.id)) {
+      names.push("is-removing");
+    }
+    return names.join(" ") || undefined;
+  }
+
+  async function removeInternship(internship) {
+    if (removing.current.has(internship.id)) {
+      return;
+    }
+    removing.current.add(internship.id);
+    const token = readToken();
+    setError("");
+    setLeaving((current) => new Set(current).add(internship.id));
+    if (motionAllowed()) {
+      await new Promise((resolve) => window.setTimeout(resolve, 480));
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/internships/${internship.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        removing.current.delete(internship.id);
+        setLeaving((current) => {
+          const next = new Set(current);
+          next.delete(internship.id);
+          return next;
+        });
+        setError(data.error || "Could not remove that company.");
+        return;
+      }
+      setInternships((current) => current.filter((item) => item.id !== internship.id));
+      removing.current.delete(internship.id);
+      setLeaving((current) => {
+        const next = new Set(current);
+        next.delete(internship.id);
+        return next;
+      });
+    } catch (requestError) {
+      removing.current.delete(internship.id);
+      setLeaving((current) => {
+        const next = new Set(current);
+        next.delete(internship.id);
+        return next;
+      });
+      setError("Could not reach the server.");
+    }
+  }
+
   async function changeField(internship, field, value) {
     const token = readToken();
     const previous = internships;
@@ -267,6 +326,7 @@ function IsUserHome({ onLogout }) {
                 <col className="col-pay" />
                 <col className="col-location" />
                 <col className="col-status" />
+                <col className="col-remove" />
               </colgroup>
               <thead>
                 <tr>
@@ -275,14 +335,14 @@ function IsUserHome({ onLogout }) {
                   <th>Pay</th>
                   <th>Location</th>
                   <th>Status</th>
+                  <th>
+                    <span className="sr-only">Remove</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {internships.map((internship) => (
-                  <tr
-                    className={internship.status === "rejected" ? "is-rejected" : undefined}
-                    key={internship.id}
-                  >
+                  <tr className={rowClass(internship)} key={internship.id}>
                     <td>
                       <div className="title-cell">
                         <SheetCell
@@ -302,7 +362,7 @@ function IsUserHome({ onLogout }) {
                         ) : null}
                       </div>
                     </td>
-                    <td>
+                    <td className="company-cell">
                       <SheetCell
                         value={internship.company}
                         display={internship.company || "—"}
@@ -335,6 +395,19 @@ function IsUserHome({ onLogout }) {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="remove-cell">
+                      <button
+                        type="button"
+                        className="remove-company"
+                        aria-label={`Remove ${internship.company || internship.title || "this application"}`}
+                        onClick={() => removeInternship(internship)}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M9 3h6l1 2h4v2H4V5h4l1-2z" />
+                          <path d="M6 9h12l-1 12H7L6 9z" />
+                        </svg>
+                      </button>
                     </td>
                   </tr>
                 ))}

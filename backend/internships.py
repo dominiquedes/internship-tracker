@@ -259,3 +259,30 @@ def register_internships(app, scrape_internship):
         if row is None:
             return jsonify({"error": "Internship not found."}), 404
         return jsonify({"internship": _item(row)})
+
+    @app.delete("/internships/<internship_id>")
+    def delete_internship(internship_id):
+        user, error = require_user()
+        if error:
+            return error
+
+        connection = _connect()
+        if connection is None:
+            return jsonify({"error": "Database is not configured."}), 503
+
+        try:
+            with connection:
+                row = connection.execute(
+                    """
+                    delete from public.internships
+                    where id = %s and user_id = %s
+                    returning id
+                    """,
+                    (internship_id, user.id),
+                ).fetchone()
+        except psycopg.Error:
+            return jsonify({"error": "Could not remove that internship."}), 500
+
+        if row is None:
+            return jsonify({"error": "Internship not found."}), 404
+        return jsonify({"ok": True})

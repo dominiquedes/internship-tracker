@@ -257,11 +257,12 @@ select:focus {
   table-layout: fixed;
 }
 
-.col-title { width: 28%; }
+.col-title { width: 26%; }
 .col-company { width: 16%; }
-.col-pay { width: 22%; }
-.col-location { width: 18%; }
-.col-status { width: 16%; }
+.col-pay { width: 20%; }
+.col-location { width: 16%; }
+.col-status { width: 15%; }
+.col-remove { width: 7%; }
 
 .sheet th {
   padding: 14px 16px;
@@ -347,6 +348,71 @@ select:focus {
   border-color: #e3b0aa;
   background: #fff7f6;
   color: var(--danger);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.remove-cell {
+  text-align: center;
+  overflow: visible;
+}
+
+.remove-company {
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.remove-company svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+
+.remove-company:hover {
+  background: #f8e4e1;
+  color: var(--danger);
+}
+
+.sheet tr.is-rejected .remove-company {
+  color: var(--danger);
+}
+
+.sheet tr.is-removing td {
+  animation: row-fade 0.48s ease forwards;
+  pointer-events: none;
+}
+
+.sheet tr.is-removing .company-cell {
+  animation: company-exit 0.48s ease forwards;
+}
+
+@keyframes row-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes company-exit {
+  to {
+    opacity: 0;
+    transform: translateX(-18px) scale(0.92);
+  }
 }
 
 .topbar {
@@ -501,6 +567,11 @@ select:focus {
 @media (prefers-reduced-motion: reduce) {
   .burst {
     display: none;
+  }
+
+  .sheet tr.is-removing td,
+  .sheet tr.is-removing .company-cell {
+    animation: none;
   }
 }
 
