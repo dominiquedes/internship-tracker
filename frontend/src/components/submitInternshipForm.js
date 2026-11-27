@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import STAGES from "./stages";
 
-const API_URL = "http://127.0.0.1:5001";
+const API_URL = process.env.REACT_APP_API_URL || "http://127.0.0.1:5001";
 
 function readToken() {
   try {
