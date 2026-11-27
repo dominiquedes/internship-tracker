@@ -239,8 +239,114 @@ select:focus {
 }
 
 .page-inner {
-  width: min(100%, 760px);
+  width: min(100%, 980px);
   margin: 0 auto;
+}
+
+.sheet-wrap {
+  margin-top: 28px;
+  overflow-x: auto;
+  background: var(--card);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+
+.sheet {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.col-title { width: 28%; }
+.col-company { width: 16%; }
+.col-pay { width: 22%; }
+.col-location { width: 18%; }
+.col-status { width: 16%; }
+
+.sheet th {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #fbf8f2;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.sheet td {
+  max-width: 280px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.sheet tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.sheet-value {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+
+.title-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.title-cell .sheet-value,
+.title-cell .sheet-edit {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.open-posting {
+  flex: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.sheet tr.is-rejected .open-posting {
+  color: var(--danger);
+}
+
+.sheet-edit {
+  width: 100%;
+  margin: 0;
+  padding: 4px 6px;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+.sheet select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.sheet tr.is-rejected td {
+  background: #f8e4e1;
+  color: var(--danger);
+}
+
+.sheet tr.is-rejected select {
+  border-color: #e3b0aa;
+  background: #fff7f6;
+  color: var(--danger);
 }
 
 .topbar {

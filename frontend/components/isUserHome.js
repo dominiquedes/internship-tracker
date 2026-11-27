@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import STAGES from "./stages";
 import StatusBurst, { effectFor } from "./statusBurst";
@@ -19,6 +19,80 @@ function readToken() {
   } catch (error) {
     return "";
   }
+}
+
+function payLabel(pay) {
+  const text = String(pay || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" · ");
+  return text || "—";
+}
+
+function SheetCell({ value, display, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const skipSave = useRef(false);
+
+  function start() {
+    skipSave.current = false;
+    setDraft(value || "");
+    setEditing(true);
+  }
+
+  function save() {
+    if (skipSave.current) {
+      skipSave.current = false;
+      return;
+    }
+    setEditing(false);
+    const next = draft.trim();
+    if (next === (value || "")) {
+      return;
+    }
+    onSave(next);
+  }
+
+  if (editing) {
+    return (
+      <input
+        className="sheet-edit"
+        value={draft}
+        autoFocus
+        aria-label="Edit cell"
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={save}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            save();
+          }
+          if (event.key === "Escape") {
+            skipSave.current = true;
+            setEditing(false);
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <span
+      className="sheet-value"
+      role="button"
+      tabIndex={0}
+      title="Double-click to edit"
+      onDoubleClick={start}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          start();
+        }
+      }}
+    >
+      {display}
+    </span>
+  );
 }
 
 function motionAllowed() {
@@ -123,6 +197,40 @@ function IsUserHome({ onLogout }) {
     }
   }
 
+  async function changeField(internship, field, value) {
+    const token = readToken();
+    const previous = internships;
+    setError("");
+    setInternships((current) =>
+      current.map((item) => (item.id === internship.id ? { ...item, [field]: value || null } : item))
+    );
+
+    try {
+      const response = await fetch(`${API_URL}/internships/${internship.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ [field]: value }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setInternships(previous);
+        setError(data.error || "Could not update that cell.");
+        return;
+      }
+      if (data.internship) {
+        setInternships((current) =>
+          current.map((item) => (item.id === internship.id ? data.internship : item))
+        );
+      }
+    } catch (requestError) {
+      setInternships(previous);
+      setError("Could not reach the server.");
+    }
+  }
+
   return (
     <main className="page">
       {burst ? <StatusBurst key={burst.token} kind={burst.kind} /> : null}
@@ -139,8 +247,8 @@ function IsUserHome({ onLogout }) {
         <h1>Your internships</h1>
         <p className="lede">
           {user?.name
-            ? `${user.name}, move each posting as the application moves forward.`
-            : "Move each posting as the application moves forward."}
+            ? `${user.name}, double-click a cell to correct it.`
+            : "Double-click a cell to correct it."}
         </p>
         <Link className="button" to="/submit">
           Add a link
@@ -151,52 +259,87 @@ function IsUserHome({ onLogout }) {
         ) : internships.length === 0 ? (
           <p className="note">Nothing saved yet. Add a posting link to start.</p>
         ) : (
-          <div className="board">
-            {STAGES.map((stage) => {
-              const items = internships.filter((internship) => internship.status === stage.id);
-              return (
-                <section className={`stage stage-${stage.id}`} key={stage.id}>
-                  <h2 className="stage-title">
-                    {stage.label}
-                    <span>{items.length}</span>
-                  </h2>
-                  {items.length === 0 ? (
-                    <p className="note">None here.</p>
-                  ) : (
-                    <div className="list">
-                      {items.map((internship) => (
-                        <article
-                          className={`internship${internship.status === "rejected" ? " is-rejected" : ""}`}
-                          key={internship.id}
-                        >
-                          <a href={internship.url} target="_blank" rel="noreferrer">
-                            <h3>{internship.title || "Untitled posting"}</h3>
-                            <p className="meta">
-                              {[internship.company, internship.location].filter(Boolean).join(" · ") ||
-                                internship.url}
-                            </p>
-                            {internship.summary ? <p className="summary">{internship.summary}</p> : null}
+          <div className="sheet-wrap">
+            <table className="sheet">
+              <colgroup>
+                <col className="col-title" />
+                <col className="col-company" />
+                <col className="col-pay" />
+                <col className="col-location" />
+                <col className="col-status" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Job title</th>
+                  <th>Company</th>
+                  <th>Pay</th>
+                  <th>Location</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {internships.map((internship) => (
+                  <tr
+                    className={internship.status === "rejected" ? "is-rejected" : undefined}
+                    key={internship.id}
+                  >
+                    <td>
+                      <div className="title-cell">
+                        <SheetCell
+                          value={internship.title}
+                          display={internship.title || "—"}
+                          onSave={(value) => changeField(internship, "title", value)}
+                        />
+                        {internship.url ? (
+                          <a
+                            className="open-posting"
+                            href={internship.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open
                           </a>
-                          <label className="status">
-                            Status
-                            <select
-                              value={internship.status}
-                              onChange={(event) => changeStatus(internship, event.target.value)}
-                            >
-                              {STAGES.map((option) => (
-                                <option key={option.id} value={option.id}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              );
-            })}
+                        ) : null}
+                      </div>
+                    </td>
+                    <td>
+                      <SheetCell
+                        value={internship.company}
+                        display={internship.company || "—"}
+                        onSave={(value) => changeField(internship, "company", value)}
+                      />
+                    </td>
+                    <td>
+                      <SheetCell
+                        value={internship.pay}
+                        display={payLabel(internship.pay)}
+                        onSave={(value) => changeField(internship, "pay", value)}
+                      />
+                    </td>
+                    <td>
+                      <SheetCell
+                        value={internship.location}
+                        display={internship.location || "—"}
+                        onSave={(value) => changeField(internship, "location", value)}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        aria-label={`Status for ${internship.title || "posting"}`}
+                        value={internship.status}
+                        onChange={(event) => changeStatus(internship, event.target.value)}
+                      >
+                        {STAGES.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

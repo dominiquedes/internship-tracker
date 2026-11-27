@@ -1,4 +1,5 @@
 import os
+import re
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import psycopg
@@ -40,6 +41,73 @@ def _pay_text(pay):
     return pay or None
 
 
+_COUNTRY = re.compile(r"^(usa|u\.s\.a\.|united states|us|uk|united kingdom)$", re.I)
+_POSTAL = re.compile(r"^\d{5}(?:-\d{4})?$")
+
+
+def _money(amount):
+    digits = re.sub(r"[^\d.]", "", amount)
+    if not digits:
+        return amount
+    number = float(digits)
+    if number == int(number):
+        return f"${int(number):,}"
+    return f"${number:,.2f}"
+
+
+def short_pay(pay):
+    text = re.sub(r"\s+", " ", str(pay or "")).strip()
+    if not text:
+        return None
+    match = re.search(
+        r"(?:USD|\$)\s*([\d,]+(?:\.\d+)?)\s*[–\-]\s*(?:USD|\$)?\s*([\d,]+(?:\.\d+)?)",
+        text,
+        re.I,
+    )
+    if not match:
+        return text
+    unit = ""
+    unit_match = re.search(
+        r"(?:/\s*|\bper\s+|\b)(year|hour|month|week|annum|annual|yearly)\b",
+        text,
+        re.I,
+    )
+    if unit_match:
+        word = unit_match.group(1).lower()
+        if word in {"annum", "annual", "yearly"}:
+            word = "year"
+        unit = f" / {word}"
+    return f"{_money(match.group(1))}–{_money(match.group(2))}{unit}"
+
+
+def _place(chunk):
+    parts = [part.strip() for part in chunk.split(",") if part.strip()]
+    kept = []
+    for part in parts:
+        if _COUNTRY.match(part) or _POSTAL.match(part) or re.match(r"^\d", part):
+            continue
+        kept.append(part)
+    if len(kept) > 2:
+        kept = kept[-2:]
+    return ", ".join(kept)
+
+
+def short_location(value):
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not text:
+        return None
+    places = []
+    for chunk in re.split(r";|\s+\|\s+", text):
+        place = _place(chunk)
+        if place and place not in places:
+            places.append(place)
+    if not places:
+        return text
+    if len(places) == 1:
+        return places[0]
+    return f"{places[0]} + {len(places) - 1}"
+
+
 def _status(value, default="applied"):
     status = str(value or "").strip() or default
     if status not in STATUSES:
@@ -54,9 +122,9 @@ def _item(row):
         "url": row["url"],
         "title": row["title"],
         "company": row["company"],
-        "location": row["location"],
+        "location": short_location(row["location"]),
         "summary": row["summary"],
-        "pay": row["pay"],
+        "pay": short_pay(row["pay"]),
         "status": row["status"] if row["status"] in STATUSES else "applied",
         "created_at": created.isoformat() if created else None,
     }
@@ -156,20 +224,34 @@ def register_internships(app, scrape_internship):
             return jsonify({"error": "Database is not configured."}), 503
 
         body = request.get_json(silent=True) or {}
-        status = _status(body.get("status"), default="")
-        if status is None:
-            return jsonify({"error": "Choose where this application stands."}), 400
+        assignments = []
+        values = []
+        if "status" in body:
+            status = _status(body.get("status"), default="")
+            if status is None:
+                return jsonify({"error": "Choose where this application stands."}), 400
+            assignments.append("status = %s")
+            values.append(status)
+        for field in ("title", "company", "pay", "location"):
+            if field not in body:
+                continue
+            text = re.sub(r"\s+", " ", str(body.get(field) or "")).strip()
+            assignments.append(f"{field} = %s")
+            values.append(text or None)
+        if not assignments:
+            return jsonify({"error": "Nothing to update."}), 400
 
+        values.extend((internship_id, user.id))
         try:
             with connection:
                 row = connection.execute(
-                    """
+                    f"""
                     update public.internships
-                    set status = %s
+                    set {", ".join(assignments)}
                     where id = %s and user_id = %s
                     returning id, url, title, company, location, summary, pay, status, created_at
                     """,
-                    (status, internship_id, user.id),
+                    values,
                 ).fetchone()
         except psycopg.Error:
             return jsonify({"error": "Could not update that internship."}), 500
